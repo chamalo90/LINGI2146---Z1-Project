@@ -30,3 +30,24 @@
 
 # Debug files
 *.dSYM/
+
+# Contiki
+*~
+*core
+core
+*.srec
+*.lst
+*.map
+*.cprg
+*.bin
+*.data
+contiki*.a
+*.firmware
+core-labels.S
+*.ihex
+*.ini
+*.ce
+*.co
+obj_sky
+symbols.[ch]
+*.sky
