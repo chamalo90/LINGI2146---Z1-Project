@@ -51,3 +51,5 @@ core-labels.S
 obj_sky
 symbols.[ch]
 *.sky
+obj_z1
+*.z1
