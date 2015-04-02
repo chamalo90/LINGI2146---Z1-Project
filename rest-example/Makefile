@@ -4,7 +4,7 @@ ifndef TARGET
 TARGET=sky
 endif
 
-CONTIKI=../..
+CONTIKI=../../contiki
 
 WITH_UIP6=1
 UIP_CONF_IPV6=1
