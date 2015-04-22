@@ -70,7 +70,7 @@
 #define PRINTLLADDR(addr)
 #endif
 
-#define SERVER_NODE(ipaddr)   uip_ip6addr(ipaddr, 0xfe80, 0, 0, 0, 0x0212, 0x7401, 0x0001, 0x02eb)
+#define SERVER_NODE(ipaddr)   uip_ip6addr(ipaddr, 0xfe80, 0, 0, 0, 0x0212, 0x7401, 0x0001, 0x00c3)
 #define LOCAL_PORT 61617
 #define REMOTE_PORT 61616
 
@@ -87,15 +87,16 @@ static bool update = false;
 
 PROCESS(border_router_process, "Border router process");
 PROCESS(temperature_alarm,"Temperature alarm process");
+PROCESS(send_request, "Send request proc");
 PROCESS(coap_client_example, "COAP Client Example");
 
 #if WEBSERVER==0
 /* No webserver */
-AUTOSTART_PROCESSES(&border_router_process,&temperature_alarm,&coap_client_example);
+AUTOSTART_PROCESSES(&border_router_process,&temperature_alarm,&send_request, &coap_client_example);
 #elif WEBSERVER>1
 /* Use an external webserver application */
 #include "webserver-nogui.h"
-AUTOSTART_PROCESSES(&border_router_process,&webserver_nogui_process,&temperature_alarm, &coap_client_example);
+AUTOSTART_PROCESSES(&border_router_process,&webserver_nogui_process,&temperature_alarm,&send_request,&coap_client_example);
 #else
 /* Use simple webserver with only one page for minimum footprint.
  * Multiple connections can result in interleaved tcp segments since
@@ -132,7 +133,7 @@ PROCESS_THREAD(webserver_nogui_process, ev, data)
 
   PROCESS_END();
 }
-AUTOSTART_PROCESSES(&border_router_process,&webserver_nogui_process,&temperature_alarm, &coap_client_example);
+AUTOSTART_PROCESSES(&border_router_process,&webserver_nogui_process,&temperature_alarm,&send_request,&coap_client_example);
 
 static const char *TOP = "<html><head><title>ContikiRPL</title></head><body>\n";
 static const char *BOTTOM = "</body></html>\n";
@@ -442,7 +443,7 @@ PROCESS_THREAD(temperature_alarm, ev, data)
   while(1) {
     etimer_set(&et, CLOCK_SECOND*2);
     float mytemp = get_mytemp();
-    printf("Temperature: %ld.%03d &deg; C\n", (long) mytemp, (unsigned) ((mytemp-floor(mytemp))*1000));
+    //printf("Temperature: %ld.%03d &deg; C\n", (long) mytemp, (unsigned) ((mytemp-floor(mytemp))*1000));
     temperature[sensors_pos];
 
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
@@ -451,7 +452,7 @@ PROCESS_THREAD(temperature_alarm, ev, data)
   PROCESS_END();
 }
 
-void send_request(bool activate){
+void send_requests(bool activate){
 
 }
 
@@ -476,11 +477,11 @@ PROCESS_THREAD(send_request, ev, data)
     mean = mean/HISTORY;
 
     if(mean > 25 && sent){
-      send_request(!sent);
+      send_requests(!sent);
       sent= true;
     }else{
       sent=false;
-      send_request(!sent);
+      send_requests(!sent);
     }
 
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
