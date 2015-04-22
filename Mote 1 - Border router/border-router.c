@@ -41,6 +41,8 @@
 #include "net/ip/uip.h"
 #include "net/ipv6/uip-ds6.h"
 #include "net/rpl/rpl.h"
+#include "rest.h"
+#include "buffer.h"
 
 #include "net/netstack.h"
 #include "dev/button-sensor.h"
@@ -57,14 +59,31 @@
 #include "net/ip/uip-debug.h"
 
 
+#if DEBUG
+#include <stdio.h>
+#define PRINTF(...) printf(__VA_ARGS__)
+#define PRINT6ADDR(addr) PRINTF("%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7], ((uint8_t *)addr)[8], ((uint8_t *)addr)[9], ((uint8_t *)addr)[10], ((uint8_t *)addr)[11], ((uint8_t *)addr)[12], ((uint8_t *)addr)[13], ((uint8_t *)addr)[14], ((uint8_t *)addr)[15])
+#define PRINTLLADDR(lladdr) PRINTF(" %02x:%02x:%02x:%02x:%02x:%02x ",(lladdr)->addr[0], (lladdr)->addr[1], (lladdr)->addr[2], (lladdr)->addr[3],(lladdr)->addr[4], (lladdr)->addr[5])
+#else
+#define PRINTF(...)
+#define PRINT6ADDR(addr)
+#define PRINTLLADDR(addr)
+#endif
+
+#define SERVER_NODE(ipaddr)   uip_ip6addr(ipaddr, 0xfe80, 0, 0, 0, 0x0212, 0x7401, 0x0001, 0x02eb)
+#define LOCAL_PORT 61617
+#define REMOTE_PORT 61616
+
+typedef enum { false, true } bool;
+
 static uip_ipaddr_t prefix;
 static uint8_t prefix_set;
 
 #define HISTORY 16
 static long temperature[HISTORY];
 static int sensors_pos;
-static boolean sent = false;
-static boolean update = false;
+static bool sent = false;
+static bool update = false;
 
 PROCESS(border_router_process, "Border router process");
 PROCESS(temperature_alarm,"Temperature alarm process");
@@ -439,7 +458,8 @@ void send_request(bool activate){
 PROCESS_THREAD(send_request, ev, data)
 {
   static struct etimer et;
-  for(int i=0; i<HISTORY;i++){
+  int i;
+  for(i=0; i<HISTORY;i++){
     temperature[i] = 0;
   }
 
@@ -450,7 +470,7 @@ PROCESS_THREAD(send_request, ev, data)
   while(1) {
     etimer_set(&et, CLOCK_SECOND*10);
     int mean = 0;
-    for(int i=0; i<HISTORY; i++){
+    for(i=0; i<HISTORY; i++){
       mean +=temperature[i];
     }
     mean = mean/HISTORY;
@@ -470,6 +490,73 @@ PROCESS_THREAD(send_request, ev, data)
 }
 
 /*---------------------------------------------------------------------------*/
+char temp[100];
+int xact_id;
+static uip_ipaddr_t server_ipaddr;
+static struct uip_udp_conn *client_conn;
+static struct etimer et;
+#define MAX_PAYLOAD_LEN   100
+
+#define NUMBER_OF_URLS 3
+char* service_urls[NUMBER_OF_URLS] = {"light", ".well-known/core", "helloworld"};
+
+static void
+response_handler(coap_packet_t* response)
+{
+  uint16_t payload_len = 0;
+  uint8_t* payload = NULL;
+  payload_len = coap_get_payload(response, &payload);
+
+  PRINTF("Response transaction id: %u", response->tid);
+  if (payload) {
+    memcpy(temp, payload, payload_len);
+    temp[payload_len] = 0;
+    PRINTF(" payload: %s\n", temp);
+  }
+}
+
+static void
+send_data(void)
+{
+  char buf[MAX_PAYLOAD_LEN];
+
+  if (init_buffer(COAP_DATA_BUFF_SIZE)) {
+    int data_size = 0;
+    int service_id = random_rand() % NUMBER_OF_URLS;
+    coap_packet_t* request = (coap_packet_t*)allocate_buffer(sizeof(coap_packet_t));
+    init_packet(request);
+
+    coap_set_method(request, COAP_GET);
+    request->tid = xact_id++;
+    request->type = MESSAGE_TYPE_CON;
+    coap_set_header_uri(request, service_urls[service_id]);
+
+    data_size = serialize_packet(request, buf);
+
+    PRINTF("Client sending request to:[");
+    PRINT6ADDR(&client_conn->ripaddr);
+    PRINTF("]:%u/%s\n", (uint16_t)REMOTE_PORT, service_urls[service_id]);
+    uip_udp_packet_send(client_conn, buf, data_size);
+
+    delete_buffer();
+  }
+}
+
+static void
+handle_incoming_data()
+{
+  PRINTF("Incoming packet size: %u \n", (uint16_t)uip_datalen());
+  if (init_buffer(COAP_DATA_BUFF_SIZE)) {
+    if (uip_newdata()) {
+      coap_packet_t* response = (coap_packet_t*)allocate_buffer(sizeof(coap_packet_t));
+      if (response) {
+        parse_message(response, uip_appdata, uip_datalen());
+        response_handler(response);
+      }
+    }
+    delete_buffer();
+  }
+}
 
 PROCESS_THREAD(coap_client_example, ev, data)
 {
