@@ -55,7 +55,7 @@
 #include <string.h>
 #include <ctype.h>
 
-#define DEBUG DEBUG_NONE
+#define DEBUG 1 //DEBUG_NONE
 #include "net/ip/uip-debug.h"
 
 
@@ -70,7 +70,7 @@
 #define PRINTLLADDR(addr)
 #endif
 
-#define SERVER_NODE(ipaddr)   uip_ip6addr(ipaddr, 0xfe80, 0, 0, 0, 0x0212, 0x7401, 0x0001, 0x00c3)
+#define SERVER_NODE(ipaddr)   uip_ip6addr(ipaddr, 0xfe80, 0, 0, 0, 0xc30c, 0, 0, 0x00c3)
 #define LOCAL_PORT 61617
 #define REMOTE_PORT 61616
 
@@ -80,7 +80,7 @@ static uip_ipaddr_t prefix;
 static uint8_t prefix_set;
 
 #define HISTORY 16
-static long temperature[HISTORY];
+static float temperature[HISTORY];
 static int sensors_pos;
 static bool sent = false;
 static bool update = false;
@@ -444,7 +444,7 @@ PROCESS_THREAD(temperature_alarm, ev, data)
     etimer_set(&et, CLOCK_SECOND*2);
     float mytemp = get_mytemp();
     //printf("Temperature: %ld.%03d &deg; C\n", (long) mytemp, (unsigned) ((mytemp-floor(mytemp))*1000));
-    temperature[sensors_pos];
+    temperature[sensors_pos]=mytemp;
 
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
   }
