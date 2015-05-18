@@ -1,7 +1,11 @@
 CONTIKI_PROJECT=border-router
 all: $(CONTIKI_PROJECT) 
 
-CONTIKI=../../..
+CONTIKI=../../contiki
+
+WITH_UIP6=1
+UIP_CONF_IPV6=1
+CFLAGS+= -DUIP_CONF_IPV6_RPL
 
 #linker optimizations
 SMALL=1

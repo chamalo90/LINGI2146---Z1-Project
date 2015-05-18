@@ -1,10 +1,14 @@
 all: rest-server-example coap-client-example
 
 ifndef TARGET
-TARGET=sky
+TARGET=z1
 endif
 
-CONTIKI=../../..
+CONTIKI=../../contiki
+
+WITH_UIP6=1
+UIP_CONF_IPV6=1
+CFLAGS+= -DUIP_CONF_IPV6_RPL
 
 WITH_COAP = 1
 
