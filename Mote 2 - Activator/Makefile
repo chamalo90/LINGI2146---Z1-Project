@@ -1,30 +1,43 @@
-all: rest-server-example coap-client-example
-
-ifndef TARGET
-TARGET=z1
-endif
+all: er-example-server
+# use this target explicitly if requried: er-plugtest-server
 
 CONTIKI=../../contiki
 
-WITH_UIP6=1
-UIP_CONF_IPV6=1
-CFLAGS+= -DUIP_CONF_IPV6_RPL
-
-WITH_COAP = 1
-
 CFLAGS += -DPROJECT_CONF_H=\"project-conf.h\"
 
-ifeq ($(WITH_COAP), 1)
-CFLAGS += -DWITH_COAP
-APPS += rest-coap
-else
-CFLAGS += -DWITH_HTTP
-APPS += rest-http
-endif
+# variable for Makefile.include
+WITH_UIP6=1
+# for some platforms
+UIP_CONF_IPV6=1
+# IPv6 make config disappeared completely
+CFLAGS += -DUIP_CONF_IPV6=1
 
+
+
+
+
+# linker optimizations
+SMALL=1
+
+# REST Engine shall use Erbium CoAP implementation
+APPS += er-coap
+APPS += rest-engine
+
+# optional rules to get assembly
+#CUSTOM_RULE_C_TO_OBJECTDIR_O = 1
+#CUSTOM_RULE_S_TO_OBJECTDIR_O = 1
 CONTIKI_WITH_IPV6 = 1
 include $(CONTIKI)/Makefile.include
 
+# optional rules to get assembly
+#$(OBJECTDIR)/%.o: asmdir/%.S
+#	$(CC) $(CFLAGS) -MMD -c $< -o $@
+#	@$(FINALIZE_DEPENDENCY)
+#
+#asmdir/%.S: %.c
+#	$(CC) $(CFLAGS) -MMD -S $< -o $@
+
+# border router rules
 $(CONTIKI)/tools/tunslip6:	$(CONTIKI)/tools/tunslip6.c
 	(cd $(CONTIKI)/tools && $(MAKE) tunslip6)
 
@@ -33,3 +46,6 @@ connect-router:	$(CONTIKI)/tools/tunslip6
 
 connect-router-cooja:	$(CONTIKI)/tools/tunslip6
 	sudo $(CONTIKI)/tools/tunslip6 -a 127.0.0.1 aaaa::1/64
+
+connect-minimal:
+	sudo ip address add fdfd::1/64 dev tap0

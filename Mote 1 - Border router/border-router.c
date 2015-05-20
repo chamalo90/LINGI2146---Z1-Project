@@ -38,11 +38,8 @@
 #include "contiki.h"
 #include "contiki-lib.h"
 #include "contiki-net.h"
-#include "net/uip.h"
 #include "net/uip-ds6.h"
 #include "net/rpl/rpl.h"
-#include "rest.h"
-#include "buffer.h"
 
 #include "net/netstack.h"
 #include "dev/button-sensor.h"
@@ -50,12 +47,14 @@
 #include "dev/slip.h"
 #include "dev/leds.h"
 
+#include "rest-engine.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 
-#define DEBUG 1 //DEBUG_NONE
+#define DEBUG 0 //DEBUG_NONE
 #include "net/uip-debug.h"
 
 
@@ -70,9 +69,6 @@
 #define PRINTLLADDR(addr)
 #endif
 
-#define SERVER_NODE(ipaddr)   uip_ip6addr(ipaddr, 0xfe80, 0, 0, 0, 0xc30c, 0, 0, 0x00c3)
-#define LOCAL_PORT 61617
-#define REMOTE_PORT 61616
 
 typedef enum { false, true } bool;
 
@@ -83,256 +79,18 @@ static uint8_t prefix_set;
 static float temperature[HISTORY];
 static int sensors_pos;
 static bool sent = false;
+long json_time_offset = 0;
 static bool update = false;
 
 PROCESS(border_router_process, "Border router process");
-PROCESS(temperature_alarm,"Temperature alarm process");
-PROCESS(send_request, "Send request proc");
-PROCESS(coap_client_example, "COAP Client Example");
+PROCESS(rest_server_example, "Rest Server Example");
 
-#if WEBSERVER==0
+
 /* No webserver */
-AUTOSTART_PROCESSES(&border_router_process,&temperature_alarm,&send_request, &coap_client_example);
-#elif WEBSERVER>1
-/* Use an external webserver application */
-#include "webserver-nogui.h"
-AUTOSTART_PROCESSES(&border_router_process,&webserver_nogui_process,&temperature_alarm,&send_request,&coap_client_example);
-#else
-/* Use simple webserver with only one page for minimum footprint.
- * Multiple connections can result in interleaved tcp segments since
- * a single static buffer is used for all segments.
- */
-#include "httpd-simple.h"
-/* The internal webserver can provide additional information if
- * enough program flash is available.
- */
-#define WEBSERVER_CONF_LOADTIME 0
-#define WEBSERVER_CONF_FILESTATS 0
-#define WEBSERVER_CONF_NEIGHBOR_STATUS 0
-/* Adding links requires a larger RAM buffer. To avoid static allocation
- * the stack can be used for formatting; however tcp retransmissions
- * and multiple connections can result in garbled segments.
- * TODO:use PSOCk_GENERATOR_SEND and tcp state storage to fix this.
- */
-#define WEBSERVER_CONF_ROUTE_LINKS 0
-#if WEBSERVER_CONF_ROUTE_LINKS
-#define BUF_USES_STACK 1
-#endif
+AUTOSTART_PROCESSES(&border_router_process, &rest_server_example);
 
-PROCESS(webserver_nogui_process, "Web server");
-PROCESS_THREAD(webserver_nogui_process, ev, data)
-{
-  PROCESS_BEGIN();
 
-  httpd_init();
 
-  while(1) {
-    PROCESS_WAIT_EVENT_UNTIL(ev == tcpip_event);
-    httpd_appcall(data);
-  }
-
-  PROCESS_END();
-}
-AUTOSTART_PROCESSES(&border_router_process,&webserver_nogui_process,&temperature_alarm,&send_request,&coap_client_example);
-
-static const char *TOP = "<html><head><title>ContikiRPL</title></head><body>\n";
-static const char *BOTTOM = "</body></html>\n";
-#if BUF_USES_STACK
-static char *bufptr, *bufend;
-#define ADD(...) do {                                                   \
-    bufptr += snprintf(bufptr, bufend - bufptr, __VA_ARGS__);      \
-  } while(0)
-#else
-static char buf[256];
-static int blen;
-#define ADD(...) do {                                                   \
-    blen += snprintf(&buf[blen], sizeof(buf) - blen, __VA_ARGS__);      \
-  } while(0)
-#endif
-
-/*---------------------------------------------------------------------------*/
-static void
-ipaddr_add(const uip_ipaddr_t *addr)
-{
-  uint16_t a;
-  int i, f;
-  for(i = 0, f = 0; i < sizeof(uip_ipaddr_t); i += 2) {
-    a = (addr->u8[i] << 8) + addr->u8[i + 1];
-    if(a == 0 && f >= 0) {
-      if(f++ == 0) ADD("::");
-    } else {
-      if(f > 0) {
-        f = -1;
-      } else if(i > 0) {
-        ADD(":");
-      }
-      ADD("%x", a);
-    }
-  }
-}
-/*---------------------------------------------------------------------------*/
-static
-PT_THREAD(generate_routes(struct httpd_state *s))
-{
-  static uip_ds6_route_t *r;
-  static uip_ds6_nbr_t *nbr;
-#if BUF_USES_STACK
-  char buf[256];
-#endif
-#if WEBSERVER_CONF_LOADTIME
-  static clock_time_t numticks;
-  numticks = clock_time();
-#endif
-
-  PSOCK_BEGIN(&s->sout);
-
-  SEND_STRING(&s->sout, TOP);
-#if BUF_USES_STACK
-  bufptr = buf;bufend=bufptr+sizeof(buf);
-#else
-  blen = 0;
-#endif
-  ADD("Neighbors<pre>");
-
-  for(nbr = nbr_table_head(ds6_neighbors);
-      nbr != NULL;
-      nbr = nbr_table_next(ds6_neighbors, nbr)) {
-
-#if WEBSERVER_CONF_NEIGHBOR_STATUS
-#if BUF_USES_STACK
-{char* j=bufptr+25;
-      ipaddr_add(&nbr->ipaddr);
-      while (bufptr < j) ADD(" ");
-      switch (nbr->state) {
-      case NBR_INCOMPLETE: ADD(" INCOMPLETE");break;
-      case NBR_REACHABLE: ADD(" REACHABLE");break;
-      case NBR_STALE: ADD(" STALE");break;
-      case NBR_DELAY: ADD(" DELAY");break;
-      case NBR_PROBE: ADD(" NBR_PROBE");break;
-      }
-}
-#else
-{uint8_t j=blen+25;
-      ipaddr_add(&nbr->ipaddr);
-      while (blen < j) ADD(" ");
-      switch (nbr->state) {
-      case NBR_INCOMPLETE: ADD(" INCOMPLETE");break;
-      case NBR_REACHABLE: ADD(" REACHABLE");break;
-      case NBR_STALE: ADD(" STALE");break;
-      case NBR_DELAY: ADD(" DELAY");break;
-      case NBR_PROBE: ADD(" NBR_PROBE");break;
-      }
-}
-#endif
-#else
-      ipaddr_add(&nbr->ipaddr);
-#endif
-
-      ADD("\n");
-#if BUF_USES_STACK
-      if(bufptr > bufend - 45) {
-        SEND_STRING(&s->sout, buf);
-        bufptr = buf; bufend = bufptr + sizeof(buf);
-      }
-#else
-      if(blen > sizeof(buf) - 45) {
-        SEND_STRING(&s->sout, buf);
-        blen = 0;
-      }
-#endif
-  }
-  ADD("</pre>Routes<pre>");
-  SEND_STRING(&s->sout, buf);
-#if BUF_USES_STACK
-  bufptr = buf; bufend = bufptr + sizeof(buf);
-#else
-  blen = 0;
-#endif
-
-  for(r = uip_ds6_route_head(); r != NULL; r = uip_ds6_route_next(r)) {
-
-#if BUF_USES_STACK
-#if WEBSERVER_CONF_ROUTE_LINKS
-    ADD("<a href=http://[");
-    ipaddr_add(&r->ipaddr);
-    ADD("]/status.shtml>");
-    ipaddr_add(&r->ipaddr);
-    ADD("</a>");
-#else
-    ipaddr_add(&r->ipaddr);
-#endif
-#else
-#if WEBSERVER_CONF_ROUTE_LINKS
-    ADD("<a href=http://[");
-    ipaddr_add(&r->ipaddr);
-    ADD("]/status.shtml>");
-    SEND_STRING(&s->sout, buf); //TODO: why tunslip6 needs an output here, wpcapslip does not
-    blen = 0;
-    ipaddr_add(&r->ipaddr);
-    ADD("</a>");
-#else
-    ipaddr_add(&r->ipaddr);
-#endif
-#endif
-    ADD("/%u (via ", r->length);
-    ipaddr_add(uip_ds6_route_nexthop(r));
-    if(1 || (r->state.lifetime < 600)) {
-      ADD(") %lus\n", (unsigned long)r->state.lifetime);
-    } else {
-      ADD(")\n");
-    }
-    SEND_STRING(&s->sout, buf);
-#if BUF_USES_STACK
-    bufptr = buf; bufend = bufptr + sizeof(buf);
-#else
-    blen = 0;
-#endif
-  }
-  ADD("</pre>");
-
-#if WEBSERVER_CONF_FILESTATS
-  static uint16_t numtimes;
-  ADD("<br><i>This page sent %u times</i>",++numtimes);
-#endif
-
-#if WEBSERVER_CONF_LOADTIME
-  numticks = clock_time() - numticks + 1;
-  ADD(" <i>(%u.%02u sec)</i>",numticks/CLOCK_SECOND,(100*(numticks%CLOCK_SECOND))/CLOCK_SECOND));
-#endif
-
-  SEND_STRING(&s->sout, buf);
-  SEND_STRING(&s->sout, BOTTOM);
-
-  PSOCK_END(&s->sout);
-}
-/*---------------------------------------------------------------------------*/
-httpd_simple_script_t
-httpd_simple_get_script(const char *name)
-{
-
-  return generate_routes;
-}
-
-#endif /* WEBSERVER */
-
-/*---------------------------------------------------------------------------*/
-static void
-print_local_addresses(void)
-{
-  int i;
-  uint8_t state;
-
-  PRINTA("Server IPv6 addresses:\n");
-  for(i = 0; i < UIP_DS6_ADDR_NB; i++) {
-    state = uip_ds6_if.addr_list[i].state;
-    if(uip_ds6_if.addr_list[i].isused &&
-       (state == ADDR_TENTATIVE || state == ADDR_PREFERRED)) {
-      PRINTA(" ");
-      uip_debug_ipaddr_print(&uip_ds6_if.addr_list[i].ipaddr);
-      PRINTA("\n");
-    }
-  }
-}
 /*---------------------------------------------------------------------------*/
 void
 request_prefix(void)
@@ -382,13 +140,6 @@ PROCESS_THREAD(border_router_process, ev, data)
   SENSORS_ACTIVATE(button_sensor);
 
   PRINTF("RPL-Border router started\n");
-#if 0
-   /* The border router runs with a 100% duty cycle in order to ensure high
-     packet reception rates.
-     Note if the MAC RDC is not turned off now, aggressive power management of the
-     cpu will interfere with establishing the SLIP connection */
-  NETSTACK_MAC.off(1);
-#endif
 
   /* Request prefix until it has been received */
   while(!prefix_set) {
@@ -402,10 +153,6 @@ PROCESS_THREAD(border_router_process, ev, data)
    */
   NETSTACK_MAC.off(1);
 
-#if DEBUG || 1
-  print_local_addresses();
-#endif
-
   while(1) {
     PROCESS_YIELD();
     if (ev == sensors_event && data == &button_sensor) {
@@ -417,173 +164,77 @@ PROCESS_THREAD(border_router_process, ev, data)
   PROCESS_END();
 }
 /*---------------------------------------------------------------------------*/
-static int
-get_temp(void)
-{
-  return temperature_sensor.value(0);
-}
 
 float floor(float x){ 
   if(x>=0.0f) return (float) ((int)x);
   else        return (float) ((int)x-1);
 }
-static float get_mytemp(void){ return (float) (((get_temp()*2.500)/4096)-0.986)*220;}
+static float get_mytemp(void){ return (float) (((temperature_sensor.value(0)*2.500)/4096)-0.986)*220;}
 
-PROCESS_THREAD(temperature_alarm, ev, data)
-{
-  static struct etimer et;
 
-  PROCESS_BEGIN();
-
-  sensors_pos = 0;
-  SENSORS_ACTIVATE(temperature_sensor);
-
-  PRINTF("Temperature alarm started\n");
-
-  while(1) {
-    etimer_set(&et, CLOCK_SECOND*2);
-    float mytemp = get_mytemp();
-    //printf("Temperature: %ld.%03d &deg; C\n", (long) mytemp, (unsigned) ((mytemp-floor(mytemp))*1000));
-    temperature[sensors_pos]=mytemp;
-
-    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
-  }
-
-  PROCESS_END();
-}
-
-void send_requests(bool activate){
-
-}
-
-PROCESS_THREAD(send_request, ev, data)
-{
-  static struct etimer et;
-  int i;
-  for(i=0; i<HISTORY;i++){
-    temperature[i] = 0;
-  }
-
-  PROCESS_BEGIN();
-
-  PRINTF("Sending request process started\n");
-
-  while(1) {
-    etimer_set(&et, CLOCK_SECOND*10);
-    int mean = 0;
-    for(i=0; i<HISTORY; i++){
-      mean +=temperature[i];
-    }
-    mean = mean/HISTORY;
-
-    if(mean > 25 && sent){
-      send_requests(!sent);
-      sent= true;
-    }else{
-      sent=false;
-      send_requests(!sent);
-    }
-
-    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
-  }
-
-  PROCESS_END();
-}
-
-/*---------------------------------------------------------------------------*/
+/*------------------------------------------------------------------------------------------------------*/
 char temp[100];
-int xact_id;
-static uip_ipaddr_t server_ipaddr;
-static struct uip_udp_conn *client_conn;
-static struct etimer et;
-#define MAX_PAYLOAD_LEN   100
 
-#define NUMBER_OF_URLS 3
-char* service_urls[NUMBER_OF_URLS] = {"light", ".well-known/core", "helloworld"};
-
-static void
-response_handler(coap_packet_t* response)
+static unsigned long time_get()
 {
-  uint16_t payload_len = 0;
-  uint8_t* payload = NULL;
-  payload_len = coap_get_payload(response, &payload);
+  /* unix time */
+  char buf[20];
+  unsigned long time = json_time_offset + clock_seconds();
 
-  PRINTF("Response transaction id: %u", response->tid);
-  if (payload) {
-    memcpy(temp, payload, payload_len);
-    temp[payload_len] = 0;
-    PRINTF(" payload: %s\n", temp);
-  }
+  return time;
 }
 
-static void
-send_data(void)
-{
-  char buf[MAX_PAYLOAD_LEN];
-
-  if (init_buffer(COAP_DATA_BUFF_SIZE)) {
-    int data_size = 0;
-    int service_id = random_rand() % NUMBER_OF_URLS;
-    coap_packet_t* request = (coap_packet_t*)allocate_buffer(sizeof(coap_packet_t));
-    init_packet(request);
-
-    coap_set_method(request, COAP_GET);
-    request->tid = xact_id++;
-    request->type = MESSAGE_TYPE_CON;
-    coap_set_header_uri(request, service_urls[service_id]);
-
-    data_size = serialize_packet(request, buf);
-
-    PRINTF("Client sending request to:[");
-    PRINT6ADDR(&client_conn->ripaddr);
-    PRINTF("]:%u/%s\n", (uint16_t)REMOTE_PORT, service_urls[service_id]);
-    uip_udp_packet_send(client_conn, buf, data_size);
-
-    delete_buffer();
-  }
-}
+/*
+ * Example for a periodic resource.
+ * It takes an additional period parameter, which defines the interval to call [name]_periodic_handler().
+ * A default post_handler takes care of subscriptions by managing a list of subscribers to notify.
+ */
+static void temperature_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
+static void temperature_periodic_handler(void);
+PERIODIC_RESOURCE(res_temperature,"title=\"temp\";obs",temperature_handler, NULL, NULL, NULL , 5*CLOCK_SECOND,temperature_periodic_handler);
 
 static void
-handle_incoming_data()
+temperature_handler(void* request, void* response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
 {
-  PRINTF("Incoming packet size: %u \n", (uint16_t)uip_datalen());
-  if (init_buffer(COAP_DATA_BUFF_SIZE)) {
-    if (uip_newdata()) {
-      coap_packet_t* response = (coap_packet_t*)allocate_buffer(sizeof(coap_packet_t));
-      if (response) {
-        parse_message(response, uip_appdata, uip_datalen());
-        response_handler(response);
-      }
-    }
-    delete_buffer();
-  }
+  REST.set_header_content_type(response, REST.type.APPLICATION_JSON);
+  REST.set_header_max_age(response, res_temperature.periodic->period / CLOCK_SECOND);
+
+  /* Usually, a CoAP server would response with the resource representation matching the periodic_handler. */
+  float mytemp = get_mytemp();
+  unsigned long int timestamp = time_get();
+  int size = snprintf((char *)buffer, preferred_size, "{ \"temperature\":%ld.%03d, \"time\":%lu }", (long) mytemp, (unsigned) ((mytemp-floor(mytemp))*1000), timestamp);
+  REST.set_response_payload(response, buffer, size);
+
+  /* A post_handler that handles subscriptions will be called for periodic resources by the REST framework. */
 }
 
-PROCESS_THREAD(coap_client_example, ev, data)
+/*
+ * Additionally, a handler function named [resource name]_handler must be implemented for each PERIODIC_RESOURCE.
+ * It will be called by the REST manager process with the defined period.
+ */
+static void
+temperature_periodic_handler()
+{
+  REST.notify_subscribers(&res_temperature);
+}
+
+
+
+
+PROCESS_THREAD(rest_server_example, ev, data)
 {
   PROCESS_BEGIN();
 
-  SERVER_NODE(&server_ipaddr);
+#ifdef WITH_COAP
+  PRINTF("COAP Server\n");
+#else
+  PRINTF("HTTP Server\n");
+#endif
 
-  /* new connection with server */
-  client_conn = udp_new(&server_ipaddr, UIP_HTONS(REMOTE_PORT), NULL);
-  udp_bind(client_conn, UIP_HTONS(LOCAL_PORT));
+  /* Initialize the REST engine. */
+  rest_init_engine();
 
-  PRINTF("Created a connection with the server ");
-  PRINT6ADDR(&client_conn->ripaddr);
-  PRINTF(" local/remote port %u/%u\n",
-  UIP_HTONS(client_conn->lport), UIP_HTONS(client_conn->rport));
-
-  etimer_set(&et, 5 * CLOCK_SECOND);
-  while(1) {
-    PROCESS_YIELD();
-    if (etimer_expired(&et)) {
-      send_data();
-      etimer_reset(&et);
-    } else if (ev == tcpip_event) {
-      handle_incoming_data();
-    }
-  }
+  rest_activate_resource(&res_temperature, "temperature/push");
 
   PROCESS_END();
 }

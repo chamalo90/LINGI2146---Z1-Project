@@ -53,3 +53,4 @@ symbols.[ch]
 *.sky
 obj_z1
 *.z1
+*.d

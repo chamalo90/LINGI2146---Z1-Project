@@ -1,137 +1,166 @@
-REST example
-============
+A Quick Introduction to the Erbium (Er) REST Engine
+===================================================
 
-Open a terminal and go to "<CONTIKI_HOME>/examples/rest-example/" directory.
-
-MAIN EXAMPLE: rest-server-example.c : A RESTful server example showing how to
-use the REST layer to develop server-side applications (possible to run it over
-either COAP or HTTP) To use COAP as the underlying application protocol, one
-should define WITH_COAP = 1 in rest-example/Makefile. Otherwise, HTTP is used.
-Look at the source code to see which resources are available. (check the
-RESOURCE macros in the code).  Each resource has a handler function which is
-called by the REST layer to serve the request.  (i.e. "helloworld" resource has
-a handler function named "helloworld_handler" which is called when a web
-service request is received for "helloworld" resource.)
-
-
-To run REST examples in COOJA on Linux
---------------------------------------------
-
-Accessing the server from outside:
-
-1. Start COOJA and load the simulation "rest-server-example.csc" by the following command.
-
-        make TARGET=cooja rest-server-example.csc
-
-2. After loading the COOJA file, open another another terminal pointing to the
-   same directory and connect to the COOJA simulation using tunslip6:
-
-        make connect-router-cooja
-
-3. You need to use a COAP or HTTP client to interact with the COOJA nodes
-   running REST code.  In this setting, two servers are available: IP addresses
-   are aaaa::0212:7402:0002:0202 and aaaa::0212:7403:0003:0303. COAP uses
-   61616, whereas HTTP uses 8080 port in default configuration.  First, ping
-   the COOJA nodes to test the connectivity.
-
-        ping6 aaaa::0212:7402:0002:0202
-        ping6 aaaa::0212:7403:0003:0303
-
-HTTP Examples
+EXAMPLE FILES
 -------------
 
-You can use curl as an http client to interact with the COOJA motes running
-REST code.
+- er-example-server.c: A RESTful server example showing how to use the REST
+  layer to develop server-side applications (at the moment only CoAP is
+  implemented for the REST Engine).
+- er-example-client.c: A CoAP client that polls the /actuators/toggle resource
+  every 10 seconds and cycles through 4 resources on button press (target
+  address is hard-coded).
+- er-plugtest-server.c: The server used for draft compliance testing at ETSI
+  IoT CoAP Plugtests. Erbium (Er) participated in Paris, France, March 2012 and
+  Sophia-Antipolis, France, November 2012 (configured for minimal-net).
 
-    curl -H "User-Agent: curl" aaaa::0212:7402:0002:0202:8080/helloworld #get helloworld plain text
-    curl -H "User-Agent: curl" aaaa::0212:7402:0002:0202:8080/led?color=green -d mode=off -i #turn off the green led
-    curl -H "User-Agent: curl" aaaa::0212:7402:0002:0202:8080/.well-known/core -i
-    curl -X POST -H "User-Agent: curl" aaaa::0212:7402:0002:0202:8080/helloworld #method not allowed
-
-COAP Examples
+PRELIMINARIES
 -------------
 
-You should run a COAP client on your computer. You can use the URLs and methods
-provided above in HTTP examples to test the COAP Server.  For example, Matthias
-Kovatsch has developed a CoAP Firefox plug-in which is accessible via
-[http://people.inf.ethz.ch/mkovatsc/#pro](http://people.inf.ethz.ch/mkovatsc/#pro)
+- Make sure rpl-border-router has the same stack and fits into mote memory:
+  You can disable RDC in border-router project-conf.h (not really required as BR keeps radio turned on).
+    #undef NETSTACK_CONF_RDC
+    #define NETSTACK_CONF_RDC     nullrdc_driver
+- For convenience, define the Cooja addresses in /etc/hosts
+      aaaa::0212:7401:0001:0101 cooja1
+      aaaa::0212:7402:0002:0202 cooja2
+      ...
+- Get the Copper (Cu) CoAP user-agent from
+  [https://addons.mozilla.org/en-US/firefox/addon/copper-270430](https://addons.mozilla.org/en-US/firefox/addon/copper-270430)
+- Optional: Save your target as default target
+      make TARGET=sky savetarget
 
-Accessing the server inside the sensor network: (Note: Provided only for COAP
-implementation) Start COOJA and load the simulation
-"coap-client-server-example.csc" by the following command.
+COOJA HOWTO
+-----------
 
-    make TARGET=cooja coap-client-server-example.csc
+###Server only:
 
-coap-client-server-example.csc : Runs rest-server-example.c as the server (over
-COAP) (IP:aaaa::0212:7401:0001:0101) in one node and coap-client-example.c as
-the client (IP: aaaa::0212:7402:0002:0202) in another node.  Client
-periodically accesses resources of server and prints the payload.
+    make TARGET=cooja server-only.csc
 
-Note: If the generated binary is bigger than the MOTE code size, then you will
-get a "region text is full" error.  Right now, REST+HTTP example uses (Contiki
-& ContikiMAC & uIPv6 & RPL & HTTP Server & REST Layer) which does not fit in
-Tmote Sky memory.  To save same code space and make the example fit, you can
-define static routes rather than using RPL or use nullrdc rather than
-ContikiMAC.  If border router does not fit, then first try to update the
-Makefile of border router in <CONTIKI_HOME>/examples/ipv6/rpl-border-router by
-setting WITH_WEBSERVER=0.
+Open new terminal
 
-To run REST server on real nodes (i.e. tmote sky)
---------------------------------------------
+    make connect-router-cooja
 
-1. Program the nodes with the rest-server-example
+- Start Copper and discover resources at coap://cooja2:5683/
+- Choose "Click button on Sky 2" from the context menu of mote 2 (server) after
+  requesting /test/separate
+- Do the same when observing /test/event
 
-        make TARGET=sky rest-server-example.upload
+###With client:
 
-2. Disconnect the nodes and program one node with the RPL border router
+    make TARGET=cooja server-client.csc
 
-        cd ../ipv6/rpl-border-router && make TARGET=sky border-router.upload
+Open new terminal
 
-3. Connect to the border router using tunslip6:
+    make connect-router-cooja
 
+- Wait until red LED toggles on mote 2 (server)
+- Choose "Click button on Sky 3" from the context menu of mote 3 (client) and
+  watch serial output
+
+TMOTES HOWTO
+------------
+
+###Server:
+
+1. Connect two Tmote Skys (check with $ make TARGET=sky sky-motelist)
+
+        make TARGET=sky er-example-server.upload MOTE=2
+        make TARGET=sky login MOTE=2
+
+2. Press reset button, get address, abort with Ctrl+C:
+   Line: "Tentative link-local IPv6 address fe80:0000:0000:0000:____:____:____:____"
+
+        cd ../ipv6/rpl-border-router/
+        make TARGET=sky border-router.upload MOTE=1
         make connect-router
 
-4. Reconnect the motes, open new terminal for each mote and run the following
-   command to note their IP addresses (after running the command reset the
-   corresponding mote to get IP address printed)
+    For a BR tty other than USB0:
 
-        make login TARGET=sky MOTE=2   #Shows the prints for first mote
-        make login TARGET=sky MOTE=3   #For second mote and so on.
+        make connect-router-port PORT=X
 
-5. Test the connectivity by pinging them.
+3. Start Copper and discover resources at:
 
-        ping6 <IPv6 Address of the MOTE>
+        coap://[aaaa::____:____:____:____]:5683/
 
-6. Remaining parts are the same with the COOJA example. (i.e. if it is a COAP
-   Server, it's available at <NODE_IP_ADDR>:61616)
+### Add a client:
 
+1. Change the hard-coded server address in er-example-client.c to aaaa::____:____:____:____
+2. Connect a third Tmote Sky
 
-To run REST server with minimal-net on Linux
---------------------------------------------
-1. Compile with minimal-net setting.
+        make TARGET=sky er-example-client.upload MOTE=3
 
-        make rest-server-example TARGET=minimal-net
+MINIMAL-NET HOWTO
+-----------------
 
-2. Run the generated executable with sudo and note the IP address of the server
-   which will be printed right after.
+With the target minimal-net you can test your CoAP applications without
+constraints, i.e., with large buffers, debug output, memory protection, etc.
+The er-plugtest-server is thought for the minimal-net platform, as it requires
+an 1280-byte IP buffer and 1024-byte blocks.
 
-        sudo ./rest-server-example.minimal-net
+        make TARGET=minimal-net er-plugtest-server
+        sudo ./er-plugtest-server.minimal-net
 
-3. How to access and test the server is same with the other settings. (i.e. if
-   it is a COAP Server, it's available at <IP_ADDRESS_FROM_STEP_2>:61616 and if
-   it's a HTTP Server it is available at <IP_ADDRESS_FROM_STEP_2>:8080)
+Open new terminal
 
-TODO
-----
+        make connect-minimal
 
-- Better option handling needed - ex: critical options are not differentiated
-  for now. Need to add support for some such as Tokens. Also, C/E difference
-  should be added.
-- Reilable message sending is missing. i.e. client example should resend
-  request in case ACK does not arrive. Same for server pushing (in case of
-  subscriptions)
-- Add Block transfer example
-- Add Subscription example
-- Add an Android/Java COAP Client to Contikiprojects to be able to interact
-  with Contiki.
-- COAP-specific Method Codes
+- Start Copper and discover resources at coap://[fdfd::ff:fe00:10]:5683/
+- You can enable the ETSI Plugtest menu in Copper's preferences
+
+Under Windows/Cygwin, WPCAP might need a patch in
+<cygwin>\usr\include\w32api\in6addr.h:
+
+    21,23c21
+    < #ifdef __INSIDE_CYGWIN__
+    <     uint32_t __s6_addr32[4];
+    < #endif
+    ---
+    >     u_int __s6_addr32[4];
+    36d33
+    < #ifdef __INSIDE_CYGWIN__
+    39d35
+    < #endif
+
+DETAILS
+-------
+
+Erbium currently implements draft 13.  Central features are commented in
+er-example-server.c.  In general, apps/er-coap-13 supports:
+
+- All draft 13 header options
+- CON Retransmissions (note COAP_MAX_OPEN_TRANSACTIONS)
+- Blockwise Transfers (note REST_MAX_CHUNK_SIZE, see er-plugtest-server.c for
+  Block1 uploads)
+- Separate Responses (no rest_set_pre_handler() required anymore, note
+  coap_separate_accept(), _reject(), and _resume())
+- Resource Discovery
+- Observing Resources (see EVENT_ and PRERIODIC_RESOURCE, note
+  COAP_MAX_OBSERVERS)
+
+REST IMPLEMENTATIONS
+--------------------
+
+The Makefile uses WITH_COAP to configure different implementations for the
+Erbium (Er) REST Engine.
+
+- WITH_COAP=13 uses Erbium CoAP 13 apps/er-coap-13/.  The default port for
+  coap-13 is 5683.
+- WITH_COAP=12 uses Erbium CoAP 12 apps/er-coap-12/.  The default port for
+  coap-12 is 5683.
+- WITH_COAP=7 uses Erbium CoAP 08 apps/er-coap-07/.  The default port for
+  coap-07/-08 is 5683.
+- WITH_COAP=3 uses Erbium CoAP 03 apps/er-coap-03/.  The default port for
+  coap-03 is 61616.  er-coap-03 produces some warnings, as it not fully
+  maintained anymore.
+- WITH_COAP=0 is a stub to link an Erbium HTTP engine that uses the same
+  resource abstraction (REST.x() functions and RESOURCE macros.
+
+TODOs
+-----
+
+- Dedicated Observe buffers
+- Optimize message struct variable access (directly access struct without copying)
+- Observe client
+- Multiple If-Match ETags
+- (Message deduplication)
