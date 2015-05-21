@@ -92,10 +92,16 @@
 #define REMOTE_PORT     UIP_HTONS(COAP_DEFAULT_PORT)
 #define HISTORY 16
 #define DEFAULT_TRESHOLD 25.0f
-static float temperature[HISTORY];
+
+struct temp_record {
+    int temperature;
+    unsigned long time;
+};
+static struct temp_record temperature[HISTORY];
 static int temp_pos;
 static float treshold;
 static struct etimer activator_timer;
+
 
 
 PROCESS(activator, "Fan Activator");
@@ -136,6 +142,23 @@ do_rssi(void)
   printf("\n");
 }
 
+static void get_temperature_and_time(char * json, struct temp_record * r)  
+{
+  // { "temperature":21, "time":2412 }
+  //Find the first ':'  and point to the next char
+  char * tmpchar = strchr(json, ':') + 1;
+  //find the ',' that marks the end of the temp and replace it by \0 for null terminating string
+  char * tmp = strchr(tmpchar, ',');
+  *tmp = '\0';
+  r->temperature = atoi(tmpchar); //convert it to int
+
+  //Find the first ':' for 'time' and point to the next char
+  tmpchar = strchr(tmp + 1, ':') + 1;
+  tmp = strchr(tmpchar, ' ');
+  *tmp = '\0';
+  r->time = atol(tmpchar); //convert it to long
+}
+
 /*----------------------------------------------------------------------------*/
 /*
  * Handle the response to the observe request and the following notifications
@@ -156,6 +179,10 @@ notification_callback(coap_observee_t *obs, void *notification,
   case NOTIFICATION_OK:
     printf("NOTIFICATION OK: %*s\n", len, (char *)payload);
     do_rssi();
+    int temp;
+    unsigned long time;
+    struct temp_record r = temperature[(temp_pos++)%HISTORY];
+    get_temperature_and_time((char *)payload, &r);
     break;
   case OBSERVE_OK: /* server accepeted observation request */
     printf("OBSERVE_OK: %*s\n", len, (char *)payload);
@@ -199,10 +226,8 @@ static float mean(void)
   int i;
   float mean = 0.0f;
   for(i = 0; i < HISTORY; i++) {
-    float t = temperature[HISTORY];
-    if(t != 0.0f) {
-      mean += temperature[HISTORY];
-    }
+    float t = temperature[i].temperature;
+    mean += temperature[i].temperature;
   }
   mean = mean / HISTORY;
   return mean;
@@ -314,7 +339,12 @@ PROCESS_THREAD(activator, ev, data)
     PROCESS_WAIT_EVENT();
      if(etimer_expired(&activator_timer)) {
       leds_toggle(LEDS_BLUE);
+      float delta = mean() - treshold;
+      if (delta > 0) {
+        f = delta;
+      }
       etimer_set(&activator_timer, CLOCK_SECOND / f);
+
     }
   }       
   
