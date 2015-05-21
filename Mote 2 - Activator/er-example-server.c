@@ -43,6 +43,8 @@
 #include "contiki-net.h"
 #include "rest-engine.h"
 #include "er-coap-engine.h"
+#include "dev/cc2420.h"
+#include "dev/cc2420_const.h"
 
 
 /* Define which resources to include to meet memory constraints. */
@@ -68,9 +70,7 @@
 #if defined (PLATFORM_HAS_SHT11)
 #include "dev/sht11-sensor.h"
 #endif
-#if defined (PLATFORM_HAS_RADIO)
 #include "dev/radio-sensor.h"
-#endif
 
 
 #define DEBUG 0
@@ -91,13 +91,17 @@
 #define LOCAL_PORT      UIP_HTONS(COAP_DEFAULT_PORT+1)
 #define REMOTE_PORT     UIP_HTONS(COAP_DEFAULT_PORT)
 #define HISTORY 16
+#define DEFAULT_TRESHOLD 25.0f
 static float temperature[HISTORY];
 static int temp_pos;
+static float treshold;
+static struct etimer activator_timer;
 
 
+PROCESS(activator, "Fan Activator");
 PROCESS(er_observe_client, "COAP Client Example");
 PROCESS(rest_server_example, "Erbium Example Server");
-AUTOSTART_PROCESSES(&er_observe_client, &rest_server_example);
+AUTOSTART_PROCESSES(&er_observe_client, &rest_server_example, &activator);
 
 
 /*----------------------------------------------------------------------------*/
@@ -119,6 +123,21 @@ static coap_observee_t *obs;
 
 /*----------------------------------------------------------------------------*/
 /*
+ * RSSI Scanner
+ */
+/*----------------------------------------------------------------------------*/
+
+static void
+do_rssi(void)
+{
+  printf("RSSI:");
+  //set_frq(RF_CHANNEL);
+  printf("%d ", radio_sensor.value(RADIO_SENSOR_LAST_VALUE) + 55);
+  printf("\n");
+}
+
+/*----------------------------------------------------------------------------*/
+/*
  * Handle the response to the observe request and the following notifications
  */
 static void
@@ -136,6 +155,7 @@ notification_callback(coap_observee_t *obs, void *notification,
   switch(flag) {
   case NOTIFICATION_OK:
     printf("NOTIFICATION OK: %*s\n", len, (char *)payload);
+    do_rssi();
     break;
   case OBSERVE_OK: /* server accepeted observation request */
     printf("OBSERVE_OK: %*s\n", len, (char *)payload);
@@ -173,6 +193,20 @@ toggle_observation(void)
                                         OBS_RESOURCE_URI, notification_callback, NULL);
   }
 }
+
+static float mean(void) 
+{
+  int i;
+  float mean = 0.0f;
+  for(i = 0; i < HISTORY; i++) {
+    float t = temperature[HISTORY];
+    if(t != 0.0f) {
+      mean += temperature[HISTORY];
+    }
+  }
+  mean = mean / HISTORY;
+  return mean;
+}
 /*----------------------------------------------------------------------------*/
 /*
  * The main (proto-)thread. It starts/stops the observation of the remote
@@ -189,6 +223,7 @@ PROCESS_THREAD(er_observe_client, ev, data)
   SERVER_NODE(server_ipaddr);
   /* receives all CoAP messages */
   coap_init_engine();
+  temp_pos = 0;
   /* init timer and button (if available) */
   etimer_set(&et, TOGGLE_INTERVAL * CLOCK_SECOND);
   toggle_observation();
@@ -254,5 +289,34 @@ PROCESS_THREAD(rest_server_example, ev, data)
     PROCESS_WAIT_EVENT();
   }        
 
+  PROCESS_END();
+}
+
+
+/*---------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*/
+/*
+ * Fan Activator
+ */
+/*----------------------------------------------------------------------------*/
+
+PROCESS_THREAD(activator, ev, data)
+{
+  PROCESS_BEGIN();
+
+  treshold = DEFAULT_TRESHOLD;
+  
+  static int f = 5;
+  etimer_set(&activator_timer, CLOCK_SECOND / f);
+
+  while(1) {
+    PROCESS_WAIT_EVENT();
+     if(etimer_expired(&activator_timer)) {
+      leds_toggle(LEDS_BLUE);
+      etimer_set(&activator_timer, CLOCK_SECOND / f);
+    }
+  }       
+  
   PROCESS_END();
 }
