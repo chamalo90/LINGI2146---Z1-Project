@@ -43,7 +43,7 @@
 
 #include "net/netstack.h"
 #include "dev/button-sensor.h"
-#include "dev/temperature-sensor.h"
+#include "dev/tmp102.h"
 #include "dev/slip.h"
 #include "dev/leds.h"
 
@@ -72,13 +72,6 @@ typedef enum { false, true } bool;
 
 static uip_ipaddr_t prefix;
 static uint8_t prefix_set;
-
-#define HISTORY 16
-static float temperature[HISTORY];
-static int sensors_pos;
-static bool sent = false;
-long json_time_offset = 0;
-static bool update = false;
 
 PROCESS(border_router_process, "Border router process");
 PROCESS(rest_server_example, "Rest Server Example");
@@ -161,36 +154,28 @@ PROCESS_THREAD(border_router_process, ev, data)
 
   PROCESS_END();
 }
-/*---------------------------------------------------------------------------*/
 
-float floor(float x){ 
-  if(x>=0.0f) return (float) ((int)x);
-  else        return (float) ((int)x-1);
-}
-static float get_mytemp(void){ return (float) (((temperature_sensor.value(0)*2.500)/4096)-0.986)*220;}
+/*----------------------------------------------------------------------------*/
 
-
-/*------------------------------------------------------------------------------------------------------*/
-char temp[100];
-
-static unsigned long time_get()
-{
-  /* unix time */
-  char buf[20];
-  unsigned long time = json_time_offset + clock_seconds();
-
-  return time;
-}
+static void temperature_handler(void* request, void* response, uint8_t *buffer,
+                                uint16_t preferred_size, int32_t *offset);
+static void temperature_periodic_handler();
+/*
+ * Periodic resource: each 5 secondes, the temperature is get and sent via a
+ * REST request.
+ */
+PERIODIC_RESOURCE(res_temperature,
+   "title=\"temp\";obs",
+   temperature_handler,
+   NULL,
+   NULL,
+   NULL,
+   5 * CLOCK_SECOND,
+   temperature_periodic_handler);
 
 /*
- * Example for a periodic resource.
- * It takes an additional period parameter, which defines the interval to call [name]_periodic_handler().
- * A default post_handler takes care of subscriptions by managing a list of subscribers to notify.
+ * Prepare a REST answer with temperature and time
  */
-static void temperature_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
-static void temperature_periodic_handler(void);
-PERIODIC_RESOURCE(res_temperature,"title=\"temp\";obs",temperature_handler, NULL, NULL, NULL , 5*CLOCK_SECOND,temperature_periodic_handler);
-
 static void
 temperature_handler(void* request, void* response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
 {
@@ -198,17 +183,17 @@ temperature_handler(void* request, void* response, uint8_t *buffer, uint16_t pre
   REST.set_header_max_age(response, res_temperature.periodic->period / CLOCK_SECOND);
 
   /* Usually, a CoAP server would response with the resource representation matching the periodic_handler. */
-  float mytemp = get_mytemp();
-  unsigned long int timestamp = time_get();
-  int size = snprintf((char *)buffer, preferred_size, "{ \"temperature\":%ld.%03d, \"time\":%lu }", (long) mytemp, (unsigned) ((mytemp-floor(mytemp))*1000), timestamp);
-  REST.set_response_payload(response, buffer, size);
+  int8_t temp = tmp102_read_temp_simple();
+  unsigned long timestamp = clock_seconds();
 
-  /* A post_handler that handles subscriptions will be called for periodic resources by the REST framework. */
+  int size = snprintf((char *)buffer, preferred_size,
+                      "{ \"temperature\":%d, \"time\":%lu }", temp, timestamp);
+
+  REST.set_response_payload(response, buffer, size);
 }
 
 /*
- * Additionally, a handler function named [resource name]_handler must be implemented for each PERIODIC_RESOURCE.
- * It will be called by the REST manager process with the defined period.
+ * This function will be called by the REST manager process.
  */
 static void
 temperature_periodic_handler()
@@ -224,6 +209,9 @@ PROCESS_THREAD(rest_server_example, ev, data)
   PROCESS_BEGIN();
 
   PRINTF("COAP Server\n");
+
+  // Init temperature sensor
+  tmp102_init();
 
   /* Initialize the REST engine. */
   rest_init_engine();
