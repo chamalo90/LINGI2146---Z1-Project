@@ -1,38 +1,5 @@
 /*
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the Institute nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE INSTITUTE AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE INSTITUTE OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * This file is part of the Contiki operating system.
- *
- */
-/**
- * \file
- *         border-router
- * \author
- *         Niclas Finne <nfi@sics.se>
- *         Joakim Eriksson <joakime@sics.se>
- *         Nicolas Tsiftes <nvt@sics.se>
+ * Border router + coap/rest/push server
  */
 
 #include "contiki.h"
@@ -67,22 +34,24 @@
 #define PRINT6ADDR(addr)
 #endif
 
-
-typedef enum { false, true } bool;
-
 static uip_ipaddr_t prefix;
 static uint8_t prefix_set;
 
+
+
+/* Declaration of our processes */
+
 PROCESS(border_router_process, "Border router process");
-PROCESS(rest_server_example, "Rest Server Example");
+PROCESS(coap_rest_push_server, "CoAP Rest PUSH Server");
+AUTOSTART_PROCESSES(&border_router_process, &coap_rest_push_server);
 
 
-/* No webserver */
-AUTOSTART_PROCESSES(&border_router_process, &rest_server_example);
+/////////////////////////////////////////////////
+//                BORDER ROUTER                //
+/////////////////////////////////////////////////
 
+// Note: mostly inspired by border-router-example
 
-
-/*---------------------------------------------------------------------------*/
 void
 request_prefix(void)
 {
@@ -93,7 +62,7 @@ request_prefix(void)
   slip_send();
   uip_len = 0;
 }
-/*---------------------------------------------------------------------------*/
+
 void
 set_prefix_64(uip_ipaddr_t *prefix_64)
 {
@@ -155,7 +124,12 @@ PROCESS_THREAD(border_router_process, ev, data)
   PROCESS_END();
 }
 
-/*----------------------------------------------------------------------------*/
+
+
+
+/////////////////////////////////////////////////
+//                  CoAP REST                  //
+/////////////////////////////////////////////////
 
 static void temperature_handler(void* request, void* response, uint8_t *buffer,
                                 uint16_t preferred_size, int32_t *offset);
@@ -179,21 +153,22 @@ PERIODIC_RESOURCE(res_temperature,
 static void
 temperature_handler(void* request, void* response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
 {
+  /* Header: JSON + max age */
   REST.set_header_content_type(response, REST.type.APPLICATION_JSON);
   REST.set_header_max_age(response, res_temperature.periodic->period / CLOCK_SECOND);
 
-  /* Usually, a CoAP server would response with the resource representation matching the periodic_handler. */
-  int8_t temp = (int8_t) (tmp102_read_temp_x100() / 100);
+  /* Content: temparature + timestamp */
+  int8_t temparature = (int8_t) (tmp102_read_temp_x100() / 100);
   unsigned long timestamp = clock_seconds();
-
   int size = snprintf((char *)buffer, preferred_size,
-                      "{ \"temperature\":%d, \"time\":%lu }", temp, timestamp);
+                      "{ \"temperature\":%d, \"time\":%lu }", temparature, timestamp);
 
+  /* Payload */
   REST.set_response_payload(response, buffer, size);
 }
 
 /*
- * This function will be called by the REST manager process.
+ * Called by the REST manager process: send data
  */
 static void
 temperature_periodic_handler()
@@ -202,20 +177,19 @@ temperature_periodic_handler()
 }
 
 
-/*----------------------------------------------------------------------------*/
-
-PROCESS_THREAD(rest_server_example, ev, data)
+PROCESS_THREAD(coap_rest_push_server, ev, data)
 {
   PROCESS_BEGIN();
 
-  PRINTF("COAP Server\n");
+  PRINTF("COAP REST Push Server\n");
 
-  // Init temperature sensor
+  /* Initialize temperature sensor. */
   tmp102_init();
 
-  /* Initialize the REST engine. */
+  /* Initialize our REST engine. */
   rest_init_engine();
 
+  /* Activate resources: just temperature */
   rest_activate_resource(&res_temperature, "temperature/push");
 
   PROCESS_END();
