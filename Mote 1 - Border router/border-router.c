@@ -183,7 +183,7 @@ temperature_handler(void* request, void* response, uint8_t *buffer, uint16_t pre
   REST.set_header_max_age(response, res_temperature.periodic->period / CLOCK_SECOND);
 
   /* Usually, a CoAP server would response with the resource representation matching the periodic_handler. */
-  int8_t temp = tmp102_read_temp_simple();
+  int8_t temp = (int8_t) (tmp102_read_temp_x100() / 100);
   unsigned long timestamp = clock_seconds();
 
   int size = snprintf((char *)buffer, preferred_size,
