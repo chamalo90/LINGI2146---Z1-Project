@@ -217,17 +217,13 @@ temperature_periodic_handler()
 }
 
 
-
+/*----------------------------------------------------------------------------*/
 
 PROCESS_THREAD(rest_server_example, ev, data)
 {
   PROCESS_BEGIN();
 
-#ifdef WITH_COAP
   PRINTF("COAP Server\n");
-#else
-  PRINTF("HTTP Server\n");
-#endif
 
   /* Initialize the REST engine. */
   rest_init_engine();
@@ -236,5 +232,3 @@ PROCESS_THREAD(rest_server_example, ev, data)
 
   PROCESS_END();
 }
-
-
