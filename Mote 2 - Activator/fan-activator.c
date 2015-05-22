@@ -36,7 +36,7 @@
 #define LOCAL_PORT      UIP_HTONS(COAP_DEFAULT_PORT+1)
 #define REMOTE_PORT     UIP_HTONS(COAP_DEFAULT_PORT)
 #define HISTORY 4
-#define DEFAULT_TRESHOLD 25.0f
+#define DEFAULT_TRESHOLD 20.0f
 
 // We want to keep temperature and time
 struct temp_record {
@@ -255,6 +255,8 @@ res_post_handler(void *request, void *response, uint8_t *buffer, uint16_t prefer
   const char *tresh = NULL;
   if ((len = REST.get_post_variable(request, "treshold", &tresh))) {
     treshold = atoi(tresh);
+    if (treshold <= 0)
+      treshold = DEFAULT_TRESHOLD;
   }
 }
 
