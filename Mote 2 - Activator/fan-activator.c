@@ -15,10 +15,8 @@
 /*
 * Include Sensors
 */
-#include "dev/button-sensor.h"
 #include "dev/leds.h"
 #include "dev/radio-sensor.h"
-#include "dev/battery-sensor.h"
 
 
 #define DEBUG 1
@@ -116,7 +114,6 @@ static uip_ipaddr_t server_ipaddr[1]; /* holds the server ip address */
 static coap_observee_t *obs;
 
 
-#define TOGGLE_INTERVAL 5
  /* The path of the resource to observe */
 #define OBS_RESOURCE_URI "temperature/push"
 
@@ -211,42 +208,6 @@ PROCESS_THREAD(er_observe_client, ev, data)
  */
 /*----------------------------------------------------------------------------*/
 
-static void res_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
-
-/* A simple getter example. Returns the reading from light sensor with a simple etag */
-RESOURCE(res_battery,
-         "title=\"Battery status\";rt=\"Battery\"",
-         res_get_handler,
-         NULL,
-         NULL,
-         NULL);
-
-static void
-res_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
-{
-  int battery = battery_sensor.value(0);
-
-  unsigned int accept = -1;
-  REST.get_header_accept(request, &accept);
-
-  if(accept == -1 || accept == REST.type.TEXT_PLAIN) {
-    REST.set_header_content_type(response, REST.type.TEXT_PLAIN);
-    snprintf((char *)buffer, REST_MAX_CHUNK_SIZE, "%d", battery);
-
-    REST.set_response_payload(response, (uint8_t *)buffer, strlen((char *)buffer));
-  } else if(accept == REST.type.APPLICATION_JSON) {
-    REST.set_header_content_type(response, REST.type.APPLICATION_JSON);
-    snprintf((char *)buffer, REST_MAX_CHUNK_SIZE, "{'battery':%d}", battery);
-
-    REST.set_response_payload(response, buffer, strlen((char *)buffer));
-  } else {
-    REST.set_response_status(response, REST.status.NOT_ACCEPTABLE);
-    const char *msg = "Supporting content-types text/plain and application/json";
-    REST.set_response_payload(response, msg, strlen(msg));
-  }
-}
-
-
 static void res_post_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
 
 /* A simple actuator example. Toggles the red led */
@@ -281,7 +242,6 @@ PROCESS_THREAD(rest_server_example, ev, data)
   /* Initialize the REST engine. */
   rest_init_engine();
   rest_activate_resource(&res_toggle, "treshold");
-  rest_activate_resource(&res_battery, "battery");
 
   while(1) {
     PROCESS_WAIT_EVENT();
