@@ -78,25 +78,39 @@ do_rssi(void)
   PRINTF("RSSI:%d\n ", rssi);
 }
 
-static void get_temperature_and_time(char * json, struct temp_record * r)  
 /*
  * Parse `json` string and put temperature and timestamp into `record` structure
  * No need to use Contiki JSON parser just for that.
+ * Return -1 if error.
  */
+static int
+get_temperature_and_time(char * json, struct temp_record *record)
 {
-  // { "temperature":21, "time":2412 }
-  //Find the first ':'  and point to the next char
-  char * tmpchar = strchr(json, ':') + 1;
-  //find the ',' that marks the end of the temp and replace it by \0 for null terminating string
-  char * tmp = strchr(tmpchar, ',');
-  *tmp = '\0';
-  r->temperature = atoi(tmpchar); //convert it to int
+  // We will receive something like: { "temperature":21, "time":2412 }
 
-  //Find the first ':' for 'time' and point to the next char
-  tmpchar = strchr(tmp + 1, ':') + 1;
-  tmp = strchr(tmpchar, ' ');
-  *tmp = '\0';
-  r->time = atol(tmpchar); //convert it to long
+  // Find the first ':'  and point to the next char
+  char *start = strchr(json, ':') + 1;
+  if (start == NULL) goto error;
+  //find the ',' that marks the end of the temp and replace it by \0
+  char *end = strchr(start, ',');
+  if (start == NULL) goto error;
+  *end = '\0';
+  record->temperature = atoi(start); // convert it to int
+
+  // Find the first ':' for 'time' and point to the next char
+  start = strchr(end + 1, ':') + 1;
+  if (start == NULL) goto error;
+  end = strchr(start, ' '); // End with space
+  if (start == NULL) goto error;
+  *end = '\0';
+  record->time = atol(start); // convert it to long
+  return 0;
+
+error:
+  PRINTF("Error when parsing JSON: %s", json);
+  record->temperature = 0;
+  record->time = 0;
+  return -1;
 }
 
 /*
