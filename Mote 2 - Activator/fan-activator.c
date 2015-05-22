@@ -1,5 +1,5 @@
 /*
-* Fan activator + Observer + Coap Server for treshold
+* Fan activator + Observer + Coap Server for threshold
 */
 
 #include <stdio.h>
@@ -36,7 +36,7 @@
 #define LOCAL_PORT      UIP_HTONS(COAP_DEFAULT_PORT+1)
 #define REMOTE_PORT     UIP_HTONS(COAP_DEFAULT_PORT)
 #define HISTORY 4
-#define DEFAULT_TRESHOLD 20.0f
+#define DEFAULT_THRESHOLD 20.0f
 
 // We want to keep temperature and time
 struct temp_record {
@@ -47,7 +47,7 @@ static struct temp_record temperature[HISTORY];
 static int temp_pos;
 
 static int rssi; // Last RSSI value
-static int treshold; // can be modified
+static int threshold; // can be modified
 static int fan_frequency = 1; // check each seconds
 static struct etimer activator_timer; // timer for the fan
 
@@ -253,10 +253,10 @@ res_post_handler(void *request, void *response, uint8_t *buffer, uint16_t prefer
 {
   size_t len = 0;
   const char *tresh = NULL;
-  if ((len = REST.get_post_variable(request, "treshold", &tresh))) {
-    treshold = atoi(tresh);
-    if (treshold <= 0)
-      treshold = DEFAULT_TRESHOLD;
+  if ((len = REST.get_post_variable(request, "threshold", &tresh))) {
+    threshold = atoi(tresh);
+    if (threshold <= 0)
+      threshold = DEFAULT_THRESHOLD;
   }
 }
 
@@ -273,7 +273,7 @@ PROCESS_THREAD(rest_server, ev, data)
 
   /* Initialize the REST engine. */
   rest_init_engine();
-  rest_activate_resource(&res_toggle, "treshold");
+  rest_activate_resource(&res_toggle, "threshold");
 
   while(1) {
     PROCESS_WAIT_EVENT(); // Wait for instructions
@@ -292,7 +292,7 @@ PROCESS_THREAD(rest_server, ev, data)
 PROCESS_THREAD(activator, ev, data)
 {
   PROCESS_BEGIN();
-  treshold = DEFAULT_TRESHOLD;
+  threshold = DEFAULT_THRESHOLD;
 
   etimer_set(&activator_timer, CLOCK_SECOND / fan_frequency);
   static int state = 0; // LED off
@@ -300,7 +300,7 @@ PROCESS_THREAD(activator, ev, data)
     PROCESS_WAIT_EVENT();
      if(etimer_expired(&activator_timer)) {
       int mean_value = mean();
-      int delta = (mean_value - treshold) * (2 - rssi/100);
+      int delta = (mean_value - threshold) * (2 - rssi/100);
       if (delta > 0) {
         fan_frequency = delta;
         if (delta > 7) delta = 7; // max value = 7 (3 bits)
@@ -321,7 +321,7 @@ PROCESS_THREAD(activator, ev, data)
       }
 
       // Print for measurements
-      PRINTF("Fan Frq: %d, Delta: %d, Threshold: %d, Mean: %d, RSSI: %d \n", fan_frequency, delta, treshold, mean_value, rssi);
+      PRINTF("Fan Frq: %d, Delta: %d, Threshold: %d, Mean: %d, RSSI: %d \n", fan_frequency, delta, threshold, mean_value, rssi);
       etimer_set(&activator_timer, CLOCK_SECOND / fan_frequency); // Adapt frequency: blink led
     }
   }
