@@ -1,4 +1,4 @@
-all: er-example-server
+all: fan-activator
 # use this target explicitly if requried: er-plugtest-server
 
 CONTIKI=../../contiki
@@ -11,10 +11,6 @@ WITH_UIP6=1
 UIP_CONF_IPV6=1
 # IPv6 make config disappeared completely
 CFLAGS += -DUIP_CONF_IPV6=1
-
-
-
-
 
 # linker optimizations
 SMALL=1

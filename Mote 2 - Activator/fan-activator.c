@@ -1,79 +1,26 @@
 /*
- * Copyright (c) 2013, Matthias Kovatsch
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the Institute nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE INSTITUTE AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE INSTITUTE OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * This file is part of the Contiki operating system.
- */
-
-/**
- * \file
- *      Erbium (Er) REST Engine example (with CoAP-specific code)
- * \author
- *      Matthias Kovatsch <kovatsch@inf.ethz.ch>
- */
+* Fan activator + Observer + Coap Server for treshold
+*/
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "contiki.h"
 #include "contiki-net.h"
-#include "rest-engine.h"
-#include "er-coap-engine.h"
-#include "dev/cc2420.h"
+#include "rest-engine.h" // for coap server
+#include "er-coap-engine.h" // for coap observe client
+#include "dev/cc2420.h" // for radio sensor
 #include "dev/cc2420_const.h"
 
-
-/* Define which resources to include to meet memory constraints. */
-#define REST_RES_LEDS 1
-#define REST_RES_TOGGLE 1
-#define REST_RES_BATTERY 1
-#define REST_RES_PUSHING 1
-#define REST_RES_RADIO 1 /* causes largest code size */
-
-
-#if defined (PLATFORM_HAS_BUTTON)
+/*
+* Include Sensors
+*/
 #include "dev/button-sensor.h"
-#endif
-#if defined (PLATFORM_HAS_LEDS)
 #include "dev/leds.h"
-#endif
-#if defined (PLATFORM_HAS_LIGHT)
-#include "dev/light-sensor.h"
-#endif
-#if defined (PLATFORM_HAS_BATTERY)
-#include "dev/battery-sensor.h"
-#endif
-#if defined (PLATFORM_HAS_SHT11)
-#include "dev/sht11-sensor.h"
-#endif
 #include "dev/radio-sensor.h"
 
 
-#define DEBUG 0
+#define DEBUG 1
 #if DEBUG
 #define PRINTF(...) printf(__VA_ARGS__)
 #define PRINT6ADDR(addr) PRINTF("[%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x]", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7], ((uint8_t *)addr)[8], ((uint8_t *)addr)[9], ((uint8_t *)addr)[10], ((uint8_t *)addr)[11], ((uint8_t *)addr)[12], ((uint8_t *)addr)[13], ((uint8_t *)addr)[14], ((uint8_t *)addr)[15])
@@ -85,12 +32,12 @@
 #endif
 
 
-/* TODO: This server address is hard-coded for Cooja. */
-#define SERVER_NODE(ipaddr)   uip_ip6addr(ipaddr, 0xaaaa, 0, 0, 0, 0xc30c, 0, 0, 0x00c3) /* cooja2 */
+/* TODO: The server address is hard-coded */
+#define SERVER_NODE(ipaddr)   uip_ip6addr(ipaddr, 0xaaaa, 0, 0, 0, 0xc30c, 0, 0, 0x00c3) 
 
 #define LOCAL_PORT      UIP_HTONS(COAP_DEFAULT_PORT+1)
 #define REMOTE_PORT     UIP_HTONS(COAP_DEFAULT_PORT)
-#define HISTORY 16
+#define HISTORY 4
 #define DEFAULT_TRESHOLD 25.0f
 
 struct temp_record {
@@ -99,10 +46,10 @@ struct temp_record {
 };
 static struct temp_record temperature[HISTORY];
 static int temp_pos;
-static float treshold;
+static int rssi;
+static int treshold;
 static int fan_frequency = 5;
 static struct etimer activator_timer;
-
 
 
 PROCESS(activator, "Fan Activator");
@@ -111,21 +58,7 @@ PROCESS(rest_server_example, "Erbium Example Server");
 AUTOSTART_PROCESSES(&er_observe_client, &rest_server_example, &activator);
 
 
-/*----------------------------------------------------------------------------*/
-/*
- * CoAP Observe Client
- */
-/*----------------------------------------------------------------------------*/
 
-
-/*----------------------------------------------------------------------------*/
-static uip_ipaddr_t server_ipaddr[1]; /* holds the server ip address */
-static coap_observee_t *obs;
-
-
-#define TOGGLE_INTERVAL 5
- /* The path of the resource to observe */
-#define OBS_RESOURCE_URI "temperature/push"
 
 
 /*----------------------------------------------------------------------------*/
@@ -137,10 +70,8 @@ static coap_observee_t *obs;
 static void
 do_rssi(void)
 {
-  printf("RSSI:");
-  //set_frq(RF_CHANNEL);
-  printf("%d ", radio_sensor.value(RADIO_SENSOR_LAST_VALUE) + 55);
-  printf("\n");
+  rssi = radio_sensor.value(RADIO_SENSOR_LAST_VALUE) + 55;
+  printf("RSSI:%d\n ", rssi);
 }
 
 static void get_temperature_and_time(char * json, struct temp_record * r)  
@@ -159,6 +90,34 @@ static void get_temperature_and_time(char * json, struct temp_record * r)
   *tmp = '\0';
   r->time = atol(tmpchar); //convert it to long
 }
+
+static int mean(void) 
+{
+  int i;
+  int mean = 0;
+  for(i = 0; i < HISTORY; i++) {
+    mean += temperature[i].temperature;
+  }
+  if (temp_pos < HISTORY) {
+    mean = mean / temp_pos;
+  }
+  else mean = mean / HISTORY;
+  return mean;
+}
+
+/*----------------------------------------------------------------------------*/
+/*
+ * CoAP Observe Client
+ */
+/*----------------------------------------------------------------------------*/
+
+static uip_ipaddr_t server_ipaddr[1]; /* holds the server ip address */
+static coap_observee_t *obs;
+
+
+#define TOGGLE_INTERVAL 5
+ /* The path of the resource to observe */
+#define OBS_RESOURCE_URI "temperature/push"
 
 /*----------------------------------------------------------------------------*/
 /*
@@ -180,10 +139,9 @@ notification_callback(coap_observee_t *obs, void *notification,
   case NOTIFICATION_OK:
     printf("NOTIFICATION OK: %*s\n", len, (char *)payload);
     do_rssi();
-    int temp;
-    unsigned long time;
-    struct temp_record r = temperature[(temp_pos++)%HISTORY];
-    get_temperature_and_time((char *)payload, &r);
+    struct temp_record * r = &temperature[(temp_pos++)%HISTORY];
+    get_temperature_and_time((char *)payload, r);
+    PRINTF("Readed Temp: %d, Readed Time %lu\n", r->temperature, r->time);
     break;
   case OBSERVE_OK: /* server accepeted observation request */
     printf("OBSERVE_OK: %*s\n", len, (char *)payload);
@@ -222,46 +180,25 @@ toggle_observation(void)
   }
 }
 
-static float mean(void) 
-{
-  int i;
-  float mean = 0.0f;
-  for(i = 0; i < HISTORY; i++) {
-    float t = temperature[i].temperature;
-    mean += temperature[i].temperature;
-  }
-  mean = mean / HISTORY;
-  return mean;
-}
 /*----------------------------------------------------------------------------*/
 /*
- * The main (proto-)thread. It starts/stops the observation of the remote
- * resource every time the timer elapses or the button (if available) is
- * pressed
+ * The observer thread. It starts the observation of the remote
+ * resource (temperature)
  */
 PROCESS_THREAD(er_observe_client, ev, data)
 {
   PROCESS_BEGIN();
 
-  static struct etimer et;
-
   /* store server address in server_ipaddr */
   SERVER_NODE(server_ipaddr);
-  /* receives all CoAP messages */
+  /* receives all CoAP responses */
   coap_init_engine();
   temp_pos = 0;
-  /* init timer and button (if available) */
-  etimer_set(&et, TOGGLE_INTERVAL * CLOCK_SECOND);
+  
   toggle_observation();
-  /* toggle observation every time the timer elapses or the button is pressed */
+
   while(1) {
     PROCESS_YIELD();
-   /* if(etimer_expired(&et)) {
-      printf("--Toggle timer--\n");
-      toggle_observation();
-      printf("\n--Done--\n");
-      etimer_reset(&et);
-    }*/
   }
   PROCESS_END();
 }
@@ -269,7 +206,7 @@ PROCESS_THREAD(er_observe_client, ev, data)
 
 /*----------------------------------------------------------------------------*/
 /*
- * CoAP Server
+ * CoAP Server for changing the threshold
  */
 /*----------------------------------------------------------------------------*/
 
@@ -277,7 +214,7 @@ static void res_post_handler(void *request, void *response, uint8_t *buffer, uin
 
 /* A simple actuator example. Toggles the red led */
 RESOURCE(res_toggle,
-         "title=\"Red LED\";rt=\"Control\"",
+         "title=\"Treshold\";rt=\"Control\"",
          NULL,
          res_post_handler,
          NULL,
@@ -286,7 +223,11 @@ RESOURCE(res_toggle,
 static void
 res_post_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
 {
-  leds_toggle(LEDS_RED);
+  size_t len = 0;
+  const char *tresh = NULL;
+  if((len = REST.get_post_variable(request, "treshold", &tresh))) {
+    treshold = atoi(tresh);
+  }
 }
 
 PROCESS_THREAD(rest_server_example, ev, data)
@@ -295,13 +236,6 @@ PROCESS_THREAD(rest_server_example, ev, data)
 
   PRINTF("Starting Erbium Example Server\n");
 
-#ifdef RF_CHANNEL
-  PRINTF("RF channel: %u\n", RF_CHANNEL);
-#endif
-#ifdef IEEE802154_PANID
-  PRINTF("PAN ID: 0x%04X\n", IEEE802154_PANID);
-#endif
-
   PRINTF("uIP buffer: %u\n", UIP_BUFSIZE);
   PRINTF("LL header: %u\n", UIP_LLH_LEN);
   PRINTF("IP+UDP header: %u\n", UIP_IPUDPH_LEN);
@@ -309,8 +243,8 @@ PROCESS_THREAD(rest_server_example, ev, data)
 
   /* Initialize the REST engine. */
   rest_init_engine();
-  rest_activate_resource(&res_toggle, "actuators/toggle");
-/* Define application-specific events here. */
+  rest_activate_resource(&res_toggle, "treshold");
+
   while(1) {
     PROCESS_WAIT_EVENT();
   }        
@@ -318,8 +252,6 @@ PROCESS_THREAD(rest_server_example, ev, data)
   PROCESS_END();
 }
 
-
-/*---------------------------------------------------------------------------*/
 
 /*----------------------------------------------------------------------------*/
 /*
@@ -330,22 +262,32 @@ PROCESS_THREAD(rest_server_example, ev, data)
 PROCESS_THREAD(activator, ev, data)
 {
   PROCESS_BEGIN();
-
   treshold = DEFAULT_TRESHOLD;
   
   
   etimer_set(&activator_timer, CLOCK_SECOND / fan_frequency);
-
+  static int state = 0;
   while(1) {
     PROCESS_WAIT_EVENT();
      if(etimer_expired(&activator_timer)) {
-      leds_toggle(LEDS_BLUE);
-      float delta = mean() - treshold;
+      int mean_value = mean();
+      int delta = (mean_value - treshold) * (1 + 100/rssi);
       if (delta > 0) {
-        fan_frequency = delta;
+        fan_frequency = delta ;
+        if (delta > 7) delta = 7;
       }
+      else delta = 0;
+      if (state == 1)  {
+        leds_off(LEDS_ALL);
+        state = 0;
+      }
+      else {
+        leds_on(delta);
+        state = 1;
+      }
+      PRINTF("Fan Frq: %d, Delta: %d, Threshold: %d, Mean: %d, RSSI: %d \n", fan_frequency, delta, treshold, mean_value, rssi);
       etimer_set(&activator_timer, CLOCK_SECOND / fan_frequency);
-
+      etimer_reset(&activator_timer);
     }
   }       
   
