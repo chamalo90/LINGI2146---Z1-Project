@@ -287,7 +287,6 @@ PROCESS_THREAD(activator, ev, data)
       }
       PRINTF("Fan Frq: %d, Delta: %d, Threshold: %d, Mean: %d, RSSI: %d \n", fan_frequency, delta, treshold, mean_value, rssi);
       etimer_set(&activator_timer, CLOCK_SECOND / fan_frequency);
-      etimer_reset(&activator_timer);
     }
   }       
   
