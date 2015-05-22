@@ -49,7 +49,7 @@ static struct temp_record temperature[HISTORY];
 static int temp_pos;
 static int rssi;
 static int treshold;
-static int fan_frequency = 5;
+static int fan_frequency = 1;
 static struct etimer activator_timer;
 
 
@@ -302,7 +302,6 @@ PROCESS_THREAD(activator, ev, data)
   PROCESS_BEGIN();
   treshold = DEFAULT_TRESHOLD;
   
-  SENSORS_ACTIVATE(battery_sensor);
   etimer_set(&activator_timer, CLOCK_SECOND / fan_frequency);
   static int state = 0;
   while(1) {
@@ -314,7 +313,10 @@ PROCESS_THREAD(activator, ev, data)
         fan_frequency = delta ;
         if (delta > 7) delta = 7;
       }
-      else delta = 0;
+      else {
+        fan_frequency = 1;
+        delta = 0;
+      }
       if (state == 1)  {
         leds_off(LEDS_ALL);
         state = 0;
@@ -324,7 +326,6 @@ PROCESS_THREAD(activator, ev, data)
         state = 1;
       }
       PRINTF("Fan Frq: %d, Delta: %d, Threshold: %d, Mean: %d, RSSI: %d \n", fan_frequency, delta, treshold, mean_value, rssi);
-       printf(" Batteries %d\n", battery_sensor.value(0) );
       etimer_set(&activator_timer, CLOCK_SECOND / fan_frequency);
     }
   }       

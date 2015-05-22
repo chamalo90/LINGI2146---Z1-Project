@@ -1,0 +1,120 @@
+Getting token
+Getting observee info
+Looking for token 0x0100
+server replied
+Notification handler
+Observee URI: temperature/push
+NOTIFICATION OK: { "temperature":20, "time":105 }
+RSSI:91
+ Readed Temp: 20, Readed Time 105
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 91 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 91 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 91 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 91 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 91 
+coap_handle_notification()
+Getting token
+Getting observee info
+Looking for token 0x0100
+server replied
+Notification handler
+Observee URI: temperature/push
+NOTIFICATION OK: { "temperature":20, "time":110 }
+RSSI:34
+ Readed Temp: 20, Readed Time 110
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 34 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 34 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 34 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 34 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 34 
+coap_handle_notification()
+Getting token
+Getting observee info
+Looking for token 0x0100
+server replied
+Notification handler
+Observee URI: temperature/push
+NOTIFICATION OK: { "temperature":20, "time":115 }
+RSSI:26
+ Readed Temp: 20, Readed Time 115
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 26 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 26 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 26 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 26 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 26 
+coap_handle_notification()
+Getting token
+Getting observee info
+Looking for token 0x0100
+server replied
+Notification handler
+Observee URI: temperature/push
+NOTIFICATION OK: { "temperature":20, "time":135 }
+RSSI:24
+ Readed Temp: 20, Readed Time 135
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 24 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 24 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 24 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 24 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 24 
+coap_handle_notification()
+Getting token
+Getting observee info
+Looking for token 0x0100
+server replied
+Notification handler
+Observee URI: temperature/push
+NOTIFICATION OK: { "temperature":20, "time":140 }
+RSSI:20
+ Readed Temp: 20, Readed Time 140
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 20 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 20 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 20 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 20 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 20 
+coap_handle_notification()
+Getting token
+Getting observee info
+Looking for token 0x0100
+server replied
+Notification handler
+Observee URI: temperature/push
+NOTIFICATION OK: { "temperature":20, "time":160 }
+RSSI:14
+ Readed Temp: 20, Readed Time 160
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 14 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 14 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 14 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 14 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 14 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 14 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 14 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 14 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 14 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 14 
+coap_handle_notification()
+Getting token
+Getting observee info
+Looking for token 0x0100
+server replied
+Notification handler
+Observee URI: temperature/push
+NOTIFICATION OK: { "temperature":20, "time":170 }
+RSSI:19
+ Readed Temp: 20, Readed Time 170
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 19 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 19 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 19 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 19 
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 19 
+coap_handle_notification()
+Getting token
+Getting observee info
+Looking for token 0x0100
+server replied
+Notification handler
+Observee URI: temperature/push
+NOTIFICATION OK: { "temperature":20, "time":175 }
+RSSI:15
+ Readed Temp: 20, Readed Time 175
+Fan Frq: 1, Delta: 0, Threshold: 25, Mean: 20, RSSI: 15 
