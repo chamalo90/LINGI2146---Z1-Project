@@ -31,7 +31,6 @@
 #endif
 
 
-/* TODO: The server address is hard-coded */
 #define SERVER_NODE(ipaddr)   uip_ip6addr(ipaddr, 0xaaaa, 0, 0, 0, 0xc30c, 0, 0, 0x00c3) 
 
 #define LOCAL_PORT      UIP_HTONS(COAP_DEFAULT_PORT+1)
@@ -52,9 +51,9 @@ static struct etimer activator_timer;
 
 
 PROCESS(activator, "Fan Activator");
-PROCESS(er_observe_client, "COAP Client Example");
-PROCESS(rest_server_example, "Erbium Example Server");
-AUTOSTART_PROCESSES(&er_observe_client, &rest_server_example, &activator);
+PROCESS(er_observe_client, "COAP Observer client");
+PROCESS(rest_server, "REST Server");
+AUTOSTART_PROCESSES(&er_observe_client, &rest_server, &activator);
 
 
 
@@ -210,7 +209,6 @@ PROCESS_THREAD(er_observe_client, ev, data)
 
 static void res_post_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
 
-/* A simple actuator example. Toggles the red led */
 RESOURCE(res_toggle,
          "title=\"Treshold\";rt=\"Control\"",
          NULL,
@@ -228,11 +226,11 @@ res_post_handler(void *request, void *response, uint8_t *buffer, uint16_t prefer
   }
 }
 
-PROCESS_THREAD(rest_server_example, ev, data)
+PROCESS_THREAD(rest_server, ev, data)
 {
   PROCESS_BEGIN();
 
-  PRINTF("Starting Erbium Example Server\n");
+  PRINTF("Starting REST Server\n");
 
   PRINTF("uIP buffer: %u\n", UIP_BUFSIZE);
   PRINTF("LL header: %u\n", UIP_LLH_LEN);
