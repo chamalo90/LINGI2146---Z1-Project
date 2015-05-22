@@ -34,6 +34,8 @@
 #define PRINT6ADDR(addr)
 #endif
 
+#define DELTA_USB_TEMP 2
+#define DELTA_FIX_TEMP 3.76
 static uip_ipaddr_t prefix;
 static uint8_t prefix_set;
 
@@ -158,7 +160,7 @@ temperature_handler(void* request, void* response, uint8_t *buffer, uint16_t pre
   REST.set_header_max_age(response, res_temperature.periodic->period / CLOCK_SECOND);
 
   /* Content: temparature + timestamp */
-  int8_t temparature = (int8_t) (tmp102_read_temp_x100() / 100);
+  int8_t temparature = (int8_t) (tmp102_read_temp_x100() / 100  - DELTA_USB_TEMP - DELTA_FIX_TEMP);
   unsigned long timestamp = clock_seconds();
   int size = snprintf((char *)buffer, preferred_size,
                       "{ \"temperature\":%d, \"time\":%lu }", temparature, timestamp);

@@ -18,6 +18,7 @@
 #include "dev/button-sensor.h"
 #include "dev/leds.h"
 #include "dev/radio-sensor.h"
+#include "dev/battery-sensor.h"
 
 
 #define DEBUG 1
@@ -210,6 +211,42 @@ PROCESS_THREAD(er_observe_client, ev, data)
  */
 /*----------------------------------------------------------------------------*/
 
+static void res_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
+
+/* A simple getter example. Returns the reading from light sensor with a simple etag */
+RESOURCE(res_battery,
+         "title=\"Battery status\";rt=\"Battery\"",
+         res_get_handler,
+         NULL,
+         NULL,
+         NULL);
+
+static void
+res_get_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset)
+{
+  int battery = battery_sensor.value(0);
+
+  unsigned int accept = -1;
+  REST.get_header_accept(request, &accept);
+
+  if(accept == -1 || accept == REST.type.TEXT_PLAIN) {
+    REST.set_header_content_type(response, REST.type.TEXT_PLAIN);
+    snprintf((char *)buffer, REST_MAX_CHUNK_SIZE, "%d", battery);
+
+    REST.set_response_payload(response, (uint8_t *)buffer, strlen((char *)buffer));
+  } else if(accept == REST.type.APPLICATION_JSON) {
+    REST.set_header_content_type(response, REST.type.APPLICATION_JSON);
+    snprintf((char *)buffer, REST_MAX_CHUNK_SIZE, "{'battery':%d}", battery);
+
+    REST.set_response_payload(response, buffer, strlen((char *)buffer));
+  } else {
+    REST.set_response_status(response, REST.status.NOT_ACCEPTABLE);
+    const char *msg = "Supporting content-types text/plain and application/json";
+    REST.set_response_payload(response, msg, strlen(msg));
+  }
+}
+
+
 static void res_post_handler(void *request, void *response, uint8_t *buffer, uint16_t preferred_size, int32_t *offset);
 
 /* A simple actuator example. Toggles the red led */
@@ -244,6 +281,7 @@ PROCESS_THREAD(rest_server_example, ev, data)
   /* Initialize the REST engine. */
   rest_init_engine();
   rest_activate_resource(&res_toggle, "treshold");
+  rest_activate_resource(&res_battery, "battery");
 
   while(1) {
     PROCESS_WAIT_EVENT();
@@ -264,14 +302,14 @@ PROCESS_THREAD(activator, ev, data)
   PROCESS_BEGIN();
   treshold = DEFAULT_TRESHOLD;
   
-  
+  SENSORS_ACTIVATE(battery_sensor);
   etimer_set(&activator_timer, CLOCK_SECOND / fan_frequency);
   static int state = 0;
   while(1) {
     PROCESS_WAIT_EVENT();
      if(etimer_expired(&activator_timer)) {
       int mean_value = mean();
-      int delta = (mean_value - treshold) * (1 + 100/rssi);
+      int delta = (mean_value - treshold) * (2 - rssi/100);
       if (delta > 0) {
         fan_frequency = delta ;
         if (delta > 7) delta = 7;
@@ -286,6 +324,7 @@ PROCESS_THREAD(activator, ev, data)
         state = 1;
       }
       PRINTF("Fan Frq: %d, Delta: %d, Threshold: %d, Mean: %d, RSSI: %d \n", fan_frequency, delta, treshold, mean_value, rssi);
+       printf(" Batteries %d\n", battery_sensor.value(0) );
       etimer_set(&activator_timer, CLOCK_SECOND / fan_frequency);
     }
   }       
