@@ -100,6 +100,7 @@ struct temp_record {
 static struct temp_record temperature[HISTORY];
 static int temp_pos;
 static float treshold;
+static int fan_frequency = 5;
 static struct etimer activator_timer;
 
 
@@ -332,8 +333,8 @@ PROCESS_THREAD(activator, ev, data)
 
   treshold = DEFAULT_TRESHOLD;
   
-  static int f = 5;
-  etimer_set(&activator_timer, CLOCK_SECOND / f);
+  
+  etimer_set(&activator_timer, CLOCK_SECOND / fan_frequency);
 
   while(1) {
     PROCESS_WAIT_EVENT();
@@ -341,9 +342,9 @@ PROCESS_THREAD(activator, ev, data)
       leds_toggle(LEDS_BLUE);
       float delta = mean() - treshold;
       if (delta > 0) {
-        f = delta;
+        fan_frequency = delta;
       }
-      etimer_set(&activator_timer, CLOCK_SECOND / f);
+      etimer_set(&activator_timer, CLOCK_SECOND / fan_frequency);
 
     }
   }       
