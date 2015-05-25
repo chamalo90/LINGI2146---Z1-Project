@@ -48,7 +48,24 @@ You first need to be connected to the border router:
 
 Then you can visit this URL by using [Copper Mozilla Firefox extension](https://addons.mozilla.org/en-US/firefox/addon/copper-270430/):
 
-    [IPv6]
+    coap://[aaaa::c30c:0:0:c3]:5683/
 
 Then you can discover and ping devices. A reset of the devices is maybe needed
 to start a new session for the very first time.
+
+This is the URL of the border-routeur, you can observe the temperature by connecting to this URL and using the OBSERVE method of CoAP
+
+    coap://[aaaa::c30c:0:0:c3]:5683/temperature/push
+
+To connect to the fan activator, use this url:
+    
+    coap://[aaaa::c30c:0:0:2eb]:5683/
+
+You can change the threshold at which the mote will activate the activator by sending a POST request to this URL:
+
+    coap://[aaaa::c30c:0:0:2eb]:5683/threshold
+
+The payload must respect the following format:
+
+    threshold=15
+
