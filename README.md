@@ -53,7 +53,7 @@ Then you can visit this URL by using [Copper Mozilla Firefox extension](https://
 Then you can discover and ping devices. A reset of the devices is maybe needed
 to start a new session for the very first time.
 
-This is the URL of the border-routeur, you can observe the temperature by connecting to this URL and using the OBSERVE method of CoAP
+This is the URL of the border-router, you can observe the temperature by connecting to this URL and using the `OBSERVE` method of CoAP
 
     coap://[aaaa::c30c:0:0:c3]:5683/temperature/push
 
